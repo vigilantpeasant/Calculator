@@ -8,6 +8,7 @@ namespace Calculator
     public partial class Form1 : Form
     {
         private int decimalCount = 0;
+
         public Form1()
         {
             InitializeComponent();
@@ -25,8 +26,17 @@ namespace Calculator
             // Avoid consecutive operators
             if (IsOperator(lastChar) && IsOperator(buttonChar))
             {
-                textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + buttonChar;
-                return;
+                // If the last character is "-" and the length is 1, don't replace it
+                if (textBox.Text.Length == 1 && lastChar == '-')
+                {
+                    return;
+                }
+                else
+                {
+                    // Replace the last operator with the new one
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + buttonChar;
+                    return;
+                }
             }
 
             // Reset decimalCount when an operator clicked
@@ -66,6 +76,14 @@ namespace Calculator
                 return;
             }
 
+            // Allow minus as the first character
+            if (textBox.Text.Length == 1 && buttonChar == '-')
+            {
+                textBox.Clear();
+                textBox.Text += buttonChar;
+                return;
+            }
+
             // Handle decimal point input when "0" is clicked
             if (textBox.Text == "0" && buttonChar == '.')
             {
@@ -87,68 +105,51 @@ namespace Calculator
         // Handle result button click
         private void result_Click(object sender, EventArgs e)
         {
-            // BUG: "0/0.1 = 0"
-
             // Get the equation from the textbox
             string equation = textBox.Text;
             // Simplify consecutive operators
             equation = HandleConsecutiveOperators(equation);
 
-            try
+            if (equation.Contains("0/0"))
             {
-                do
-                {
-                    // Check for division by zero
-                    if (equation.Contains("/0") || equation.Contains("0/"))
-                    {
-                        if (equation.Contains(".0/") || equation.Contains("/0."))
-                        {
-                            clear_Click(sender, e);
-                            break;
-                        }
-                        ShowError("Division by zero is not allowed.");
-                        clear_Click(sender, e);
-                        return;
-                    }
+                MessageBox.Show("Result is undefined", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                decimalCount = 0;
+                textBox.Text = "0";
+                textBox.SelectionStart = textBox.Text.Length;
 
-                    // Check for equation long
-                    if (equation.Length <= 1)
-                    {
-                        ShowError("Too short equation");
-                        clear_Click(sender, e);
-                        return;
-                    }
-
-                    // Check for equations end with an operator
-                    if (IsOperator(equation.Last()))
-                    {
-                        ShowError("Equation ends with an operator");
-                        clear_Click(sender, e);
-                        return;
-                    }
-                }
-                while (false);
-                {
-                    // Use DataTable to compute the result
-                    var result = new DataTable().Compute(equation, null);
-                    // Change the decimal separator to "."
-                    textBox.Text = result.ToString().Replace(',', '.');
-                    textBox.SelectionStart = textBox.Text.Length;
-                }
-            }
-            catch (DivideByZeroException)
-            {
-                ShowError("Division by zero is not allowed.");
+                clear_Click(sender, e);
                 return;
             }
-        }
 
-        // Handle errors
-        private void ShowError(string message)
-        {
-            MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            decimalCount = 0;
-            textBox.Text = "0";
+            // Check for division by zero
+            if (equation.Contains("/0"))
+            {
+                MessageBox.Show("Division by zero is not allowed", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                decimalCount = 0;
+                textBox.Text = "0";
+                textBox.SelectionStart = textBox.Text.Length;
+
+                clear_Click(sender, e);
+                return;
+            }
+
+            // Check for equation length
+            if (equation.Length <= 1)
+            {
+                clear_Click(sender, e);
+                return;
+            }
+
+            // Check if the equation ends with an operator
+            if (IsOperator(equation.Last()))
+            {
+                return;
+            }
+
+            // Use DataTable to compute the result
+            var result = new DataTable().Compute(equation, null);
+            // Change the decimal separator to "."
+            textBox.Text = result.ToString().Replace(',', '.');
             textBox.SelectionStart = textBox.Text.Length;
         }
 
@@ -199,11 +200,23 @@ namespace Calculator
                 textBox.Clear();
             }
 
-            // Handle consecutive operators
-            if (textBox.Text.Length > 0)
+            // Allow minus as the first character
+            if (textBox.Text.Length == 1 && e.KeyChar == '-')
             {
-                // Avoid consecutive operators
-                if (IsOperator(lastChar) && IsOperator(e.KeyChar))
+                textBox.Clear();
+                textBox.Text += e.KeyChar;
+                e.Handled = true;
+            }
+
+            // Avoid consecutive operators
+            if (IsOperator(lastChar) && IsOperator(e.KeyChar))
+            {
+                // If the last character is "-" and the length is 1, don't replace it
+                if (textBox.Text.Length == 1 && lastChar == '-')
+                {
+                    e.Handled = true;
+                }
+                else
                 {
                     // Replace the last operator with the new one
                     textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + e.KeyChar;
