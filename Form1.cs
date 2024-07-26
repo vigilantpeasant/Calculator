@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Data;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -39,6 +38,105 @@ namespace Calculator
                 }
             }
 
+            // Prevent operators when first character is parentheses
+            if (lastChar == '(' && IsParentheses(lastChar) && IsOperator(buttonChar))
+            {
+                // Allow minus as the first character
+                if (textBox.Text == "(" && buttonChar == '-')
+                {
+                    textBox.Text += buttonChar;
+                    return;
+                }
+                return;
+            }
+
+            // Add "*" when last character is ')' and clicked key is number or decimal
+            if (lastChar == ')' && (char.IsDigit(buttonChar) || buttonChar == '.'))
+            {
+                textBox.Text += "*";
+            }
+
+            // Handle parentheses
+            if (buttonChar == '(')
+            {
+                // Prevent decimals before parentheses
+                if (lastChar == '.')
+                {
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1);
+                    return;
+                }
+
+                // Allow parentheses as the first character
+                if (textBox.Text == "0")
+                {
+                    if (lastChar == '(')
+                        return;
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + buttonChar;
+                    return;
+                }
+
+                // Prevent multiple opening parentheses in a row
+                if (lastChar == '(')
+                {
+                    return;
+                }
+                else
+                {
+                    // Handle cases where there is no text or the last character is an operator
+                    if (textBox.Text.Length == 0 || IsOperator(lastChar))
+                    {
+                        textBox.Text += buttonChar;
+                        //e.Handled = true;
+                        //openParentheses++;
+                    }
+                    else
+                    {
+                        textBox.Text += "*" + buttonChar;
+                        //e.Handled = true;
+                        //openParentheses++;
+                    }
+                    return;
+                }
+            }
+
+            if (buttonChar == ')')
+            {
+                // Handle cases where there are unbalanced parentheses
+                int openParentheses = textBox.Text.Count(c => c == '(');
+                int closeParentheses = textBox.Text.Count(c => c == ')');
+                if (closeParentheses >= openParentheses)
+                {
+                    return;
+                }
+
+                // Prevent decimals before parentheses
+                if (lastChar == '.')
+                {
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + buttonChar;
+                    return;
+                }
+
+                // Prevent multiple opening parentheses in a row
+                if (IsParentheses(lastChar))
+                {
+                    return;
+                }
+                else
+                {
+                    // Prevent closing parenthesis if the last character is an operator
+                    if (IsOperator(lastChar) || lastChar == '(' || !char.IsDigit(lastChar))
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        textBox.Text += buttonChar;
+                        return;
+                        //closeParentheses++;
+                    }
+                }
+            }
+
             // Reset decimalCount when an operator clicked
             if (IsOperator(buttonChar))
             {
@@ -53,7 +151,7 @@ namespace Calculator
             if (buttonChar == '.')
             {
                 // If there is no text or the last character is an operator, prepend a "0."
-                if (textBox.Text.Length == 0 || IsOperator(lastChar))
+                if (textBox.Text.Length == 0 || IsOperator(lastChar) || IsParentheses(lastChar))
                 {
                     textBox.Text += "0.";
                     return;
@@ -61,7 +159,7 @@ namespace Calculator
                 else
                 {
                     // Check if the current number segment already has a decimal point
-                    int lastOperatorIndex = textBox.Text.LastIndexOfAny(new char[] { '+', '-', '*', '/' });
+                    int lastOperatorIndex = textBox.Text.LastIndexOfAny(new char[] { '+', '-', '*', '/', '(', ')' });
                     string lastSegment = lastOperatorIndex == -1 ? textBox.Text : textBox.Text.Substring(lastOperatorIndex + 1);
                     if (lastSegment.Contains('.'))
                     {
@@ -77,7 +175,7 @@ namespace Calculator
             }
 
             // Allow minus as the first character
-            if (textBox.Text.Length == 1 && buttonChar == '-')
+            if (textBox.Text == "0" && buttonChar == '-')
             {
                 textBox.Clear();
                 textBox.Text += buttonChar;
@@ -105,51 +203,51 @@ namespace Calculator
         // Handle result button click
         private void result_Click(object sender, EventArgs e)
         {
-            // Get the equation from the textbox
             string equation = textBox.Text;
-            // Simplify consecutive operators
             equation = HandleConsecutiveOperators(equation);
 
+            // Check for unbalanced parentheses
+            int openParentheses = equation.Count(c => c == '(');
+            int closeParentheses = equation.Count(c => c == ')');
+            if (openParentheses != closeParentheses)
+            {
+                return;
+            }
+
+            // Check for invalid operations
             if (equation.Contains("0/0"))
             {
                 MessageBox.Show("Result is undefined", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 decimalCount = 0;
                 textBox.Text = "0";
-                textBox.SelectionStart = textBox.Text.Length;
-
-                clear_Click(sender, e);
                 return;
             }
 
-            // Check for division by zero
             if (equation.Contains("/0"))
             {
                 MessageBox.Show("Division by zero is not allowed", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 decimalCount = 0;
                 textBox.Text = "0";
-                textBox.SelectionStart = textBox.Text.Length;
-
-                clear_Click(sender, e);
-                return;
-            }
-
-            // Check for equation length
-            if (equation.Length <= 1)
-            {
-                clear_Click(sender, e);
                 return;
             }
 
             // Check if the equation ends with an operator
-            if (IsOperator(equation.Last()))
+            if (IsOperator(equation.Last()) || equation.Last() == '(' || equation.Last() == '.')
             {
                 return;
             }
 
-            // Use DataTable to compute the result
-            var result = new DataTable().Compute(equation, null);
-            // Change the decimal separator to "."
-            textBox.Text = result.ToString().Replace(',', '.');
+            try
+            {
+                var expression = new NCalc.Expression(equation);
+                var result = expression.Evaluate();
+                textBox.Text = result.ToString().Replace(',', '.');
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                textBox.Text = "0";
+            }
             textBox.SelectionStart = textBox.Text.Length;
         }
 
@@ -188,11 +286,18 @@ namespace Calculator
             return (character == '+' || character == '-' || character == '*' || character == '/');
         }
 
+        // Check if the character is an parentheses
+        private bool IsParentheses(char character)
+        {
+            return (character == '(' || character == ')');
+        }
+
         // Handle key presses
         private void textBox_KeyPress(object sender, KeyPressEventArgs e)
         {
             TextBox textBox = (TextBox)sender;
             char lastChar = textBox.Text.Length > 0 ? textBox.Text.Last() : '\0';
+            char secondLastChar = textBox.Text.Length > 1 ? textBox.Text[textBox.Text.Length - 2] : '\0';
 
             // Clear initial "0" when a number is pressed
             if (textBox.Text == "0" && char.IsDigit(e.KeyChar))
@@ -200,8 +305,108 @@ namespace Calculator
                 textBox.Clear();
             }
 
+            // Prevent operators when first character is parentheses
+            if (lastChar == '(' && IsParentheses(lastChar) && IsOperator(e.KeyChar))
+            {
+                // Allow minus as the first character
+                if (lastChar == '(' && e.KeyChar == '-')
+                {
+                    textBox.Text += e.KeyChar;
+                    e.Handled = true;
+                }
+                e.Handled = true;
+            }
+
+            // Add "*" when last character is ')' and clicked key is number or decimal
+            if (lastChar == ')' && (char.IsDigit(e.KeyChar) || e.KeyChar == '.'))
+            {
+                textBox.Text += "*";
+            }
+
+            // Handle parentheses
+            if (e.KeyChar == '(')
+            {
+                // Prevent decimals before parentheses
+                if (lastChar == '.')
+                {
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1);
+                    e.Handled = true;
+                }
+
+                // Allow parentheses as the first character
+                if (textBox.Text == "0")
+                {
+                    if (lastChar == '(')
+                        e.Handled = true;
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1);
+                    e.Handled = true;
+                }
+
+                // Prevent multiple opening parentheses in a row
+                if (lastChar == '(')
+                {
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Handle cases where there is no text or the last character is an operator
+                    if (textBox.Text.Length == 0 || IsOperator(lastChar))
+                    {
+                        textBox.Text += e.KeyChar;
+                    }
+                    else
+                    {
+                        textBox.Text += "*" + e.KeyChar;
+                    }
+                    e.Handled = true;
+                }
+            }
+
+            if (e.KeyChar == ')')
+            {
+                // Handle cases where there are unbalanced parentheses
+                int openParentheses = textBox.Text.Count(c => c == '(');
+                int closeParentheses = textBox.Text.Count(c => c == ')');
+                if (closeParentheses >= openParentheses)
+                {
+                    e.Handled = true;
+                }
+
+                // Prevent decimals before parentheses
+                if (lastChar == '.')
+                {
+                    textBox.Text = textBox.Text.Substring(0, textBox.Text.Length - 1) + e.KeyChar;
+                    e.Handled = true;
+                }
+
+                // Prevent multiple opening parentheses in a row
+                if (IsParentheses(lastChar))
+                {
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Prevent closing parenthesis if the last character is an operator
+                    if (IsOperator(lastChar) || lastChar == '(' || !char.IsDigit(lastChar))
+                    {
+                        e.Handled = true;
+                    }
+                    else
+                    {
+                        textBox.Text += e.KeyChar;
+                        e.Handled = true;
+                    }
+                }
+            }
+
+            // Prevent consecutive parentheses
+            if (IsParentheses(lastChar) && IsParentheses(e.KeyChar))
+            {
+                e.Handled = true;
+            }
+
             // Allow minus as the first character
-            if (textBox.Text.Length == 1 && e.KeyChar == '-')
+            if (textBox.Text == "0" && e.KeyChar == '-')
             {
                 textBox.Clear();
                 textBox.Text += e.KeyChar;
@@ -211,8 +416,8 @@ namespace Calculator
             // Avoid consecutive operators
             if (IsOperator(lastChar) && IsOperator(e.KeyChar))
             {
-                // If the last character is "-" and the length is 1, don't replace it
-                if (textBox.Text.Length == 1 && lastChar == '-')
+                // If the last character is "-" and the second last character is "(", don't replace it
+                if (lastChar == '-' && secondLastChar == '(')
                 {
                     e.Handled = true;
                 }
@@ -228,7 +433,7 @@ namespace Calculator
             if (e.KeyChar == '.')
             {
                 // If there is no text or the last character is an operator, prepend a "0."
-                if (textBox.Text.Length == 0 || IsOperator(lastChar))
+                if (textBox.Text.Length == 0 || IsOperator(lastChar) || IsParentheses(lastChar))
                 {
                     textBox.Text += "0.";
                     e.Handled = true;
@@ -236,7 +441,7 @@ namespace Calculator
                 else
                 {
                     // Check if the current number segment already has a decimal point
-                    int lastOperatorIndex = textBox.Text.LastIndexOfAny(new char[] { '+', '-', '*', '/' });
+                    int lastOperatorIndex = textBox.Text.LastIndexOfAny(new char[] { '+', '-', '*', '/', '(', ')' });
                     string lastSegment = lastOperatorIndex == -1 ? textBox.Text : textBox.Text.Substring(lastOperatorIndex + 1);
                     if (lastSegment.Contains('.'))
                     {
